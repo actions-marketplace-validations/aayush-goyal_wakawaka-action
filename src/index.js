@@ -72,132 +72,140 @@ try {
     const statConfigRegex = /<!-- WAKAWAKA_CONFIG__STATS_([A-Z_]+) -->/g;
     const statsConfigs = mdContent.match(statConfigRegex);
 
-    for (let config of statsConfigs) {
-        const regex = /<!-- WAKAWAKA_CONFIG__STATS_([A-Z_]+) -->/;
-        const queryParams = config.match(regex);
+    if (statsConfigs) {
+        for (let config of statsConfigs) {
+            const regex = /<!-- WAKAWAKA_CONFIG__STATS_([A-Z_]+) -->/;
+            const queryParams = config.match(regex);
 
-        if (queryParams) {
-            const statType = queryParams[1];
+            if (queryParams) {
+                const statType = queryParams[1];
 
-            let endpoint;
-            if (statType === 'BEST_DAY') {
-                endpoint = 'best_day';
-            } else {
-                endpoint = 'daily_avg';
-            }
+                let endpoint;
+                if (statType === 'BEST_DAY') {
+                    endpoint = 'best_day';
+                } else {
+                    endpoint = 'daily_avg';
+                }
 
-            const apiUrl =
-                `${API_BASE_URL}/stats/` +
-                endpoint +
-                `?username=${wakaUsername}&token=${wakaToken}`;
+                const apiUrl =
+                    `${API_BASE_URL}/stats/` +
+                    endpoint +
+                    `?username=${wakaUsername}&token=${wakaToken}`;
 
-            try {
-                const apiResponse = await axios.get(apiUrl);
+                try {
+                    const apiResponse = await axios.get(apiUrl);
 
-                if (apiResponse.status === 200) {
-                    const shieldImg = apiResponse.data.data;
+                    if (apiResponse.status === 200) {
+                        const shieldImg = apiResponse.data.data;
 
-                    const configComment = `<!-- WAKAWAKA_CONFIG__STATS_${statType} -->`;
-                    const badgeRegex = new RegExp(
-                        `${configComment}\\s*!\\[badge\\]\\([^)]+\\)`
-                    );
-
-                    // Check if the badge already exists for the stat type
-                    if (badgeRegex.test(mdContent)) {
-                        mdContent = mdContent.replace(
-                            badgeRegex,
-                            `${configComment}\n![badge](${shieldImg})`
+                        const configComment = `<!-- WAKAWAKA_CONFIG__STATS_${statType} -->`;
+                        const badgeRegex = new RegExp(
+                            `${configComment}\\s*!\\[badge\\]\\([^)]+\\)`
                         );
-                    } else {
-                        const configCommentIndex =
-                            mdContent.indexOf(configComment);
-                        const nextLine = mdContent
-                            .substring(
-                                configCommentIndex + configComment.length
-                            )
-                            .trim();
 
-                        if (nextLine === '' || nextLine.startsWith('<!--')) {
-                            // Add the badge below the config comment
+                        // Check if the badge already exists for the stat type
+                        if (badgeRegex.test(mdContent)) {
                             mdContent = mdContent.replace(
-                                configComment,
+                                badgeRegex,
                                 `${configComment}\n![badge](${shieldImg})`
                             );
+                        } else {
+                            const configCommentIndex =
+                                mdContent.indexOf(configComment);
+                            const nextLine = mdContent
+                                .substring(
+                                    configCommentIndex + configComment.length
+                                )
+                                .trim();
+
+                            if (
+                                nextLine === '' ||
+                                nextLine.startsWith('<!--')
+                            ) {
+                                // Add the badge below the config comment
+                                mdContent = mdContent.replace(
+                                    configComment,
+                                    `${configComment}\n![badge](${shieldImg})`
+                                );
+                            }
                         }
+                    } else {
+                        console.error(
+                            'ERROR:',
+                            'Some issue happened.',
+                            apiResponse.data.message
+                        );
                     }
-                } else {
-                    console.error(
-                        'ERROR:',
-                        'Some issue happened.',
-                        apiResponse.data.message
-                    );
+                } catch (error) {
+                    console.error('ERROR:', error.toString());
                 }
-            } catch (error) {
-                console.error('ERROR:', error.toString());
             }
         }
     }
 
     // Charts Controller
     const configRegex = /<!-- WAKAWAKA_CONFIG__ST=\d&CT=\d&DT=\d&R=\d -->/g;
-    const configs = mdContent.match(configRegex);
+    const chartsConfigs = mdContent.match(configRegex);
 
     const currentMapConfig = new Map();
 
-    for (let config of configs) {
-        const regex =
-            /<!-- WAKAWAKA_CONFIG__ST=(\d)&CT=(\d)&DT=(\d)&R=(\d) -->/;
+    if (chartsConfigs) {
+        for (let config of chartsConfigs) {
+            const regex =
+                /<!-- WAKAWAKA_CONFIG__ST=(\d)&CT=(\d)&DT=(\d)&R=(\d) -->/;
 
-        // Match the string against the regex and extract the captured groups
-        const queryParams = config.match(regex);
+            // Match the string against the regex and extract the captured groups
+            const queryParams = config.match(regex);
 
-        if (queryParams) {
-            // Extracted digit values are in the matches array starting from index 1
-            const statType = getStatType(queryParams[1]);
-            const chartType = queryParams[2];
-            const dataType = queryParams[3];
-            const range = queryParams[4];
+            if (queryParams) {
+                // Extracted digit values are in the matches array starting from index 1
+                const statType = getStatType(queryParams[1]);
+                const chartType = queryParams[2];
+                const dataType = queryParams[3];
+                const range = queryParams[4];
 
-            const imgName = `img_${statType}_${chartType}_${dataType}_${range}.svg`;
-            currentMapConfig.set(imgName, true);
+                const imgName = `img_${statType}_${chartType}_${dataType}_${range}.svg`;
+                currentMapConfig.set(imgName, true);
 
-            const apiResponse = await axios.get(
-                `${API_BASE_URL}/charts/${statType}?username=${wakaUsername}&range=${range}&chart_type=${chartType}&data_type=${dataType}&token=${wakaToken}`
-            );
-            const chartSVG = apiResponse.data;
-
-            const imgFilePath = `${imgFolderPath}/${imgName}`;
-            await fsPromises.writeFile(imgFilePath, chartSVG);
-
-            const configIndex = mdContent.indexOf(config);
-            const imgTagIndex = configIndex + config.length;
-            const imgStr = mdContent
-                .substring(imgTagIndex, imgTagIndex + 5)
-                .trim();
-
-            if (imgStr === '<img') {
-                const lineBreakIndex = mdContent
-                    .substring(imgTagIndex + 1)
-                    .indexOf('\n');
-                const existingImgTag = mdContent.substring(
-                    imgTagIndex,
-                    imgTagIndex + lineBreakIndex + 1
+                const apiResponse = await axios.get(
+                    `${API_BASE_URL}/charts/${statType}?username=${wakaUsername}&range=${range}&chart_type=${chartType}&data_type=${dataType}&token=${wakaToken}`
                 );
+                const chartSVG = apiResponse.data;
 
-                mdContent = mdContent.replace(
-                    existingImgTag,
-                    '\n' + `<img src="./img/${imgName}" alt="WakaTime chart" />`
-                );
-            } else {
-                mdContent = mdContent.replace(
-                    config,
-                    config +
+                const imgFilePath = `${imgFolderPath}/${imgName}`;
+                await fsPromises.writeFile(imgFilePath, chartSVG);
+
+                const configIndex = mdContent.indexOf(config);
+                const imgTagIndex = configIndex + config.length;
+                const imgStr = mdContent
+                    .substring(imgTagIndex, imgTagIndex + 5)
+                    .trim();
+
+                if (imgStr === '<img') {
+                    const lineBreakIndex = mdContent
+                        .substring(imgTagIndex + 1)
+                        .indexOf('\n');
+                    const existingImgTag = mdContent.substring(
+                        imgTagIndex,
+                        imgTagIndex + lineBreakIndex + 1
+                    );
+
+                    mdContent = mdContent.replace(
+                        existingImgTag,
                         '\n' +
-                        `<img src="./img/${imgName}" alt="WakaTime chart" />`
-                );
+                            `<img src="./img/${imgName}" alt="WakaTime chart" />`
+                    );
+                } else {
+                    mdContent = mdContent.replace(
+                        config,
+                        config +
+                            '\n' +
+                            `<img src="./img/${imgName}" alt="WakaTime chart" />`
+                    );
+                }
+            } else {
+                console.error(`No query params provided in ${config}`);
             }
-        } else {
-            console.error(`No query params provided in ${config}`);
         }
     }
 
